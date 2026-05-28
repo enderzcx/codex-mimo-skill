@@ -1,23 +1,23 @@
 # codex-mimo-skill
 
-> Codex 写代码，MiMo 管文案、审美和内部前端首版。
+> Codex 负责工程，MiMo 负责表达、审美与内部前端首版。
 
-`codex-mimo-skill` 是一个给 Codex 用的 MiMo v2.5 Pro CLI + Skill。它不改 Codex 配置，不做代理，不碰 Reasonix；只把适合 MiMo 的任务拆出来：中文文案、命名、真人反馈、UI/UX、视觉 brief、中文 UI review，以及 G2 内部 admin / ERP / dashboard 的 frontend first-pass。
+`codex-mimo-skill` 是一个专为 Codex 设计的 MiMo v2.5 Pro CLI + Skill。它不修改 Codex 配置、不做代理、不干扰 Reasonix；只把适合 MiMo 的任务拆出来：中文文案、命名、真人反馈、UI/UX、视觉 brief、中文 UI review，以及 G2 内部 admin / ERP / dashboard 的 frontend first-pass。
 
 ```text
-Codex decides -> codex-mimo calls MiMo -> copy / brief / first-pass -> Codex applies and verifies
+Codex 决策 -> codex-mimo 调用 MiMo -> 产出文案 / brief / 首版候选 -> Codex 验证并集成
 ```
 
-## 为什么单独做
+## 为什么从 Reasonix 拆出来
 
-MiMo 和 DeepSeek 适合放在不同 harness 里：
+MiMo 和 DeepSeek 的职责不同，分开管理更清晰：
 
-| 模型 | 最适合的位置 | 负责什么 |
+| 模型 | 适合在哪 | 负责什么 |
 |---|---|---|
 | MiMo v2.5 Pro | Codex 直接调用 | 文案、中文表达、UI/UX、内部前端首版 |
 | DeepSeek v4 Pro | Reasonix / Ollama Cloud | 工程 review、二意见、最终判断 |
 
-这也是为什么 MiMo 从 `codex-reasonix-bridge` 里拆出来。`codex-reasonix-bridge` 继续保留 Reasonix / DeepSeek 的 review 角色；这个仓库只做 MiMo。
+`codex-reasonix-bridge` 继续保留 Reasonix / DeepSeek 的 review 角色；这个仓库只专注 MiMo。拆开之后，两个项目各司其职，互不干扰。
 
 ## 和 mimo2codex 的关系
 
