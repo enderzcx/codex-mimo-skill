@@ -3,7 +3,15 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runMimo } from "../src/mimo.mjs";
+import { DEFAULT_TIMEOUT_MS, resolveTimeoutMs, runMimo } from "../src/mimo.mjs";
+
+test("resolveTimeoutMs uses default and validates explicit values", () => {
+  assert.equal(resolveTimeoutMs(undefined), DEFAULT_TIMEOUT_MS);
+  assert.equal(resolveTimeoutMs("0"), 0);
+  assert.equal(resolveTimeoutMs("2500"), 2500);
+  assert.throws(() => resolveTimeoutMs("-1"), /invalid MiMo timeout/);
+  assert.throws(() => resolveTimeoutMs("soon"), /invalid MiMo timeout/);
+});
 
 test("runs MiMo through OpenAI-compatible chat completions", async () => {
   const originalFetch = globalThis.fetch;
@@ -77,6 +85,33 @@ test("loads MiMo credentials from CR-only .env aliases", async () => {
     process.chdir(originalCwd);
     restoreEnv(savedEnv);
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("runMimo fails clearly when fetch times out", async () => {
+  const originalFetch = globalThis.fetch;
+  const savedEnv = snapshotEnv();
+
+  process.env.MIMO_API_KEY = "test-key";
+  process.env.MIMO_BASE_URL = "https://mimo.example/v1";
+  globalThis.fetch = async (_url, init) =>
+    new Promise((_resolve, reject) => {
+      init.signal.addEventListener("abort", () => reject(init.signal.reason));
+    });
+
+  try {
+    await assert.rejects(
+      () => runMimo({
+        model: "mimo-v2.5-pro",
+        system: "system",
+        prompt: "prompt",
+        timeoutMs: 10,
+      }),
+      /timed out after 10ms/,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv(savedEnv);
   }
 });
 

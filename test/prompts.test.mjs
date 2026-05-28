@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { buildSystemPrompt, buildUserPrompt, normalizeMode } from "../src/prompts.mjs";
-import { routeMetadata, wrapJsonOutput } from "../src/cli.mjs";
+import { parseDelegateArgs, routeMetadata, wrapJsonOutput } from "../src/cli.mjs";
 
 test("normalizes mode aliases", () => {
   assert.equal(normalizeMode("copywriting"), "copywrite");
@@ -43,4 +43,12 @@ test("wraps non-json output", () => {
   assert.equal(wrapped.mode, "copywrite");
   assert.equal(wrapped.routing.provider, "mimo");
   assert.equal(wrapped.deliverables[0].content, "hello");
+});
+
+test("parses background and timeout delegate controls", () => {
+  const opts = parseDelegateArgs(["--background", "--timeout-ms", "0", "--mode", "frontend-first-pass", "build UI"]);
+  assert.equal(opts.background, true);
+  assert.equal(opts.timeoutMs, 0);
+  assert.equal(opts.mode, "frontend-first-pass");
+  assert.equal(opts.task, "build UI");
 });

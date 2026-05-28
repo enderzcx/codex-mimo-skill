@@ -116,6 +116,36 @@ Codex 接手后必须检查：
 
 不适合交给 MiMo 单独负责的范围：生产 React/Next 架构、复杂状态管理、支付/权限/数据写入、G3 模块、SEO/a11y 合规页面。
 
+## 后台任务（Background Jobs）
+
+对于耗时较长的任务，例如 `frontend-first-pass`、完整的 `frontend-ux-plan`、大型 `ui-review-cn` 或长篇 `copywrite`，建议使用后台 job 模式，避免在命令行同步阻塞等待。
+
+启动后台任务：
+
+```bash
+cmi delegate --mode frontend-first-pass --background --json "输出一个内部 ERP 页面首版"
+```
+
+任务提交后，CLI 会立即返回一个 job ID，随后可通过以下命令管理：
+
+- `cmi status <job-id>`：查看任务状态
+- `cmi result <job-id>`：获取已完成任务的结果
+- `cmi cancel <job-id>`：取消正在运行的任务
+
+**超时设置：**
+
+- 前台任务默认超时为 180000ms（3 分钟），可通过 `--timeout-ms` 调整
+- 后台任务默认 `timeoutMs` 为 0（即无超时限制），除非通过 `--timeout-ms` 显式指定
+
+**适用场景：**
+
+- `frontend-first-pass`：生成完整首版候选代码
+- `frontend-ux-plan`：制定完整 UI/UX 方案
+- `ui-review-cn`：大型页面中文 UI 审查
+- `copywrite`：多组件、多状态的长文案
+
+简单、快速的 MiMo 调用，例如简短的 `naming` 或 `rewrite-cn`，可以继续使用前台模式。
+
 ## 示例
 
 中文 UI review：

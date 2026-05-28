@@ -51,6 +51,31 @@ Health check:
 codex-mimo health --json
 ```
 
+## Background Jobs
+
+For long-running MiMo tasks, use background mode to avoid blocking the Codex workflow:
+
+```bash
+cmi delegate --mode <mode> --background --json "<task>"
+```
+
+The command returns immediately with a job ID. Manage tasks with:
+
+- `cmi status <job-id>`: check job status
+- `cmi result <job-id>`: retrieve output once completed
+- `cmi cancel <job-id>`: abort a running job
+
+Foreground tasks default to `--timeout-ms 180000` (3 min). Background tasks default to `timeoutMs: 0` (no timeout) unless explicitly passed.
+
+Use background mode for:
+
+- `frontend-first-pass`: generating full candidate source code
+- `frontend-ux-plan`: creating comprehensive UI/UX plans
+- `ui-review-cn`: reviewing large or complex UI components
+- `copywrite`: drafting lengthy, multi-state copy
+
+For quick tasks like `naming` or `rewrite-cn`, foreground mode is usually enough.
+
 ## Credentials
 
 - The CLI reads the current shell env first, then `.env` files.
