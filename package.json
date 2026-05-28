@@ -1,0 +1,29 @@
+{
+  "name": "codex-mimo-skill",
+  "version": "0.1.0",
+  "description": "Codex skill and CLI for delegating copy, UI/UX, and frontend first-pass work to MiMo.",
+  "type": "module",
+  "bin": {
+    "codex-mimo": "./bin/codex-mimo.mjs",
+    "cmi": "./bin/codex-mimo.mjs"
+  },
+  "scripts": {
+    "test": "node --test",
+    "smoke": "node ./bin/codex-mimo.mjs delegate --mode copywrite --dry-run --json \"写一个中文空状态\"",
+    "health": "node ./bin/codex-mimo.mjs health --json",
+    "install:skill": "node ./scripts/install-skill.mjs"
+  },
+  "keywords": [
+    "codex",
+    "mimo",
+    "xiaomi",
+    "skill",
+    "ui-ux",
+    "copywriting",
+    "frontend"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  }
+}
