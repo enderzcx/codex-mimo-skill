@@ -8,6 +8,26 @@
 Codex 决策 -> codex-mimo 调用 MiMo -> 产出文案 / brief / 首版候选 -> Codex 验证并集成
 ```
 
+## 最简路线
+
+默认不用起任何服务。大多数文案、UI/UX、中文表达、页面信息架构和内部前端首版任务，直接走：
+
+```bash
+cmi delegate --mode <mode> --json "<task>"
+```
+
+只有在你明确需要“MiMo 作为 Codex 底层模型，并拿到 `codex exec` 的 repo / tools / sandbox / JSONL events”时，才需要一个 Responses adapter。原因来自最新版 `openai/codex` 源码：`wire_api = "chat"` 已被移除，Codex provider 只接受 `wire_api = "responses"`；而 MiMo 官方 OpenAI-compatible endpoint 是 `/v1/chat/completions`。所以真 MiMo-in-Codex 不能只靠一段 `config.toml` 直连，必须有 Responses <-> Chat Completions 转换层。
+
+如果你已经有 MiMo-backed Codex adapter（这里默认使用 `mimo2codex`），也可以让 MiMo 进入 Codex 的 `codex exec` harness：
+
+```text
+Codex 决策 -> cmi adapter start -> cmi harness --mimo2codex -> codex exec(repo/tools/sandbox/events) -> mimo2codex -> MiMo -> Codex 读 result 并验证
+```
+
+注意：`cmi harness` 本身不默认启动 adapter。它只是 `codex exec` 包装器。`--mimo2codex` 会注入一次性的本地 Responses provider config，不会改 `~/.codex/config.toml`，也不会覆盖你的 OpenAI 登录。只有 adapter 正在跑时，才是真正让 MiMo 在 Codex harness 里跑。否则它会明确失败，不会假装用了 MiMo。
+
+后台 job 会同时保存 `result`（结构化 payload）、`rendered`（人类可读输出）和 `raw`（原始 MiMo 输出）。`cmi result <job-id>` 默认返回 `rendered`，`cmi result --json <job-id>` 返回完整 job 记录。即使 MiMo 返回 mixed / fenced / non-JSON 内容，CLI 也会保留 raw fallback，避免其他 Codex session 误判为“没有调用成功”。
+
 ## 为什么从 Reasonix 拆出来
 
 MiMo 和 DeepSeek 的职责不同，分开管理更清晰：
@@ -28,9 +48,9 @@ MiMo 和 DeepSeek 的职责不同，分开管理更清晰：
 | 项目 | 解决的问题 |
 |---|---|
 | `mimo2codex` | 本地代理，把 Codex 的 Responses API 请求转给 Chat Completions 兼容模型，并提供 provider 路由 |
-| `codex-mimo-skill` | Codex workflow 工具，把文案、UI/UX、frontend first-pass 这些任务显式交给 MiMo |
+| `codex-mimo-skill` | 零服务的 Codex workflow 工具，把文案、UI/UX、frontend first-pass 这些任务显式交给 MiMo；也提供 `cmi harness` 调用 Codex exec |
 
-一句话：`mimo2codex` 更像模型接入层；`codex-mimo-skill` 更像 Codex 协作层。
+一句话：`mimo2codex` 更像模型接入层；`codex-mimo-skill` 更像 Codex 协作层。默认只用 `codex-mimo-skill`。两者组合时，`mimo2codex` 提供本地 Responses adapter，`cmi harness --mimo2codex` 负责按任务模式启动 Codex harness。
 
 ## 30 秒上手
 
@@ -55,6 +75,36 @@ cmi delegate --mode copywrite --dry-run --json "写一个中文空状态"
 
 ```bash
 cmi delegate --mode naming --json "给一个 ERP 报价异常处理台取三个名字"
+```
+
+少数情况：需要 repo/tool/sandbox 上下文的 frontend first-pass，可临时启动 `mimo2codex`：
+
+```bash
+cmi adapter status --json
+cmi adapter start --json
+```
+
+然后用一次性 provider config 跑 Codex harness：
+
+```bash
+cmi harness --mode frontend-ux-plan \
+  --mimo2codex \
+  --json \
+  "基于当前仓库，给 ERP 报价异常处理台出完整 UI/UX 方案"
+```
+
+先确认不会真实调用 Codex：
+
+```bash
+cmi harness --mode frontend-ux-plan --mimo2codex --dry-run --json "检查路由"
+```
+
+如果只是让 MiMo 写文案、出 UI/UX 方案、审中文 UI 或给内部 ERP 页面出首版候选，继续用 `cmi delegate`，不用启动任何服务。
+
+任务结束后可以停掉 adapter：
+
+```bash
+cmi adapter stop --json
 ```
 
 ## 配置
@@ -126,10 +176,21 @@ Codex 接手后必须检查：
 cmi delegate --mode frontend-first-pass --background --json "输出一个内部 ERP 页面首版"
 ```
 
+已有 `mimo2codex` adapter 时，Codex harness 任务同样支持后台：
+
+```bash
+cmi harness --mode frontend-first-pass \
+  --mimo2codex \
+  --background \
+  --json \
+  "在当前仓库上下文里输出内部 ERP 页面首版候选"
+```
+
 任务提交后，CLI 会立即返回一个 job ID，随后可通过以下命令管理：
 
 - `cmi status <job-id>`：查看任务状态
-- `cmi result <job-id>`：获取已完成任务的结果
+- `cmi result <job-id>`：获取已完成任务的 rendered 结果
+- `cmi result --json <job-id>`：获取完整 job 记录，包括 `result`、`rendered`、`raw` 和错误信息
 - `cmi cancel <job-id>`：取消正在运行的任务
 
 **超时设置：**

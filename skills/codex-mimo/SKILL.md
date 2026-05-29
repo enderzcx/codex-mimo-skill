@@ -23,9 +23,15 @@ Use this skill when a Codex task touches:
 - MiMo owns copy, Chinese expression, UI wording, layout direction, visual briefs, naming, human feedback, frontend UI/UX aesthetics, Chinese UI review, and G2 internal frontend first-pass candidates.
 - DeepSeek / Reasonix review belongs in `codex-reasonix-bridge`, not here.
 
+Companion docs in this skill:
+
+- [runtime.md](runtime.md): exact command/runtime rules
+- [result-handling.md](result-handling.md): how to relay rendered/raw output
+- [prompt-templates.md](prompt-templates.md): safe delegation prompt templates
+
 ## Command
 
-Prefer:
+Fast direct MiMo call:
 
 ```bash
 codex-mimo delegate --mode <mode> --json "<task>"
@@ -36,6 +42,23 @@ Short alias:
 ```bash
 cmi delegate --mode <mode> --json "<task>"
 ```
+
+Default to `cmi delegate`: it calls MiMo directly and does not start a service.
+
+Advanced Codex harness call, only when an existing MiMo-backed Responses profile/adapter is already configured:
+
+```bash
+cmi harness --mode <mode> --profile <mimo-codex-profile> --json "<task>"
+```
+
+Preferred one-shot local adapter form:
+
+```bash
+cmi adapter start --json
+cmi harness --mode <mode> --mimo2codex --json "<task>"
+```
+
+`harness` means `codex exec` harness. Latest Codex requires `wire_api = "responses"`; MiMo's direct OpenAI-compatible endpoint is Chat Completions, so true MiMo-in-Codex needs a Responses adapter such as `mimo2codex`. `--mimo2codex` injects a one-shot local Codex provider config and does not edit `~/.codex/config.toml` or overwrite OpenAI login.
 
 Attach files:
 
@@ -59,10 +82,18 @@ For long-running MiMo tasks, use background mode to avoid blocking the Codex wor
 cmi delegate --mode <mode> --background --json "<task>"
 ```
 
+Use background `cmi harness` only for an existing MiMo-backed Responses profile:
+
+```bash
+cmi adapter start --json
+cmi harness --mode <mode> --mimo2codex --background --json "<task>"
+```
+
 The command returns immediately with a job ID. Manage tasks with:
 
 - `cmi status <job-id>`: check job status
-- `cmi result <job-id>`: retrieve output once completed
+- `cmi result <job-id>`: retrieve rendered output once completed
+- `cmi result --json <job-id>`: retrieve the full job record, including `result`, `rendered`, `raw`, and errors
 - `cmi cancel <job-id>`: abort a running job
 
 Foreground tasks default to `--timeout-ms 180000` (3 min). Background tasks default to `timeoutMs: 0` (no timeout) unless explicitly passed.
@@ -75,6 +106,12 @@ Use background mode for:
 - `copywrite`: drafting lengthy, multi-state copy
 
 For quick tasks like `naming` or `rewrite-cn`, foreground mode is usually enough.
+
+## Result Handling
+
+MiMo can return JSON, fenced JSON, or plain text. The CLI extracts structured JSON when possible and preserves raw model output when parsing fails.
+
+Codex must read the actual foreground output or `cmi result <job-id>` before summarizing. Do not say MiMo was used unless a command was actually run. If MiMo returns useful raw text instead of JSON, relay the useful content and mention that the CLI used raw fallback.
 
 ## Credentials
 
@@ -115,9 +152,10 @@ MiMo output is content/design/review/candidate-code input, not an unconditional 
 
 Codex must:
 
-1. Summarize which mode was called.
-2. State the main suggestions.
-3. Say what was applied or intentionally ignored.
-4. Verify any code/UI changes itself.
+1. State which command and mode were called.
+2. Read `cmi result <job-id>` or the foreground JSON before summarizing.
+3. Preserve concrete copy, UX constraints, and validation checklists; do not summarize them away.
+4. Say what Codex applied or intentionally ignored.
+5. Verify any code/UI changes itself.
 
 If MiMo cannot be called, state the exact command attempted and the error, then continue with Codex's own judgment instead of pretending MiMo was consulted.

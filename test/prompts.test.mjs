@@ -42,7 +42,37 @@ test("wraps non-json output", () => {
   const wrapped = wrapJsonOutput("hello", "copywrite", routing);
   assert.equal(wrapped.mode, "copywrite");
   assert.equal(wrapped.routing.provider, "mimo");
+  assert.equal(wrapped.parse_status, "raw-fallback");
   assert.equal(wrapped.deliverables[0].content, "hello");
+});
+
+test("extracts fenced JSON from mixed MiMo output", () => {
+  const routing = routeMetadata({
+    mode: "copywrite",
+    config: {
+      model: "mimo-v2.5-pro",
+      baseUrl: "https://mimo.example/v1",
+      hasKey: true,
+      envFiles: [],
+    },
+  });
+  const wrapped = wrapJsonOutput([
+    "model log",
+    "```json",
+    JSON.stringify({
+      summary: "copy done",
+      deliverables: [{ type: "copy", title: "CTA", content: "开始试试" }],
+      notes: [],
+      next_for_codex: ["apply copy"],
+    }),
+    "```",
+  ].join("\n"), "copywrite", routing);
+
+  assert.equal(wrapped.summary, "copy done");
+  assert.equal(wrapped.parse_status, "extracted");
+  assert.equal(wrapped.parse_source, "fenced");
+  assert.equal(wrapped.deliverables[0].content, "开始试试");
+  assert.match(wrapped.notes.at(-1), /extracted structured JSON/);
 });
 
 test("parses background and timeout delegate controls", () => {

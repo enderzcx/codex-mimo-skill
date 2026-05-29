@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -72,7 +72,18 @@ export function saveState(cwd, state) {
     .slice(0, MAX_JOBS);
   const next = { version: STATE_VERSION, jobs };
   writeFileSync(resolveStateFile(cwd), `${JSON.stringify(next, null, 2)}\n`, "utf8");
+  pruneJobArtifacts(cwd, new Set(jobs.map((job) => job.id)));
   return next;
+}
+
+function pruneJobArtifacts(cwd, retainedIds) {
+  const jobsDir = resolveJobsDir(cwd);
+  if (!existsSync(jobsDir)) return;
+  for (const entry of readdirSync(jobsDir)) {
+    const match = entry.match(/^(.*)\.(?:json|log)$/);
+    if (!match || retainedIds.has(match[1])) continue;
+    rmSync(join(jobsDir, entry), { force: true });
+  }
 }
 
 export function generateJobId(prefix = "mimo") {
