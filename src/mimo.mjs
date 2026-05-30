@@ -11,8 +11,8 @@ export function resolveTimeoutMs(value = process.env.CMI_TIMEOUT_MS ?? process.e
   return parsed;
 }
 
-export async function runMimo({ model, baseUrl, system, prompt, json = false, timeoutMs = resolveTimeoutMs() }) {
-  const config = resolveMimoConfig({ model, baseUrl });
+export async function runMimo({ model, baseUrl, system, prompt, images = [], json = false, timeoutMs = resolveTimeoutMs() }) {
+  const config = resolveMimoConfig({ model, baseUrl, needsVision: images.length > 0 });
   if (!config.apiKey) {
     throw new Error("MiMo API key missing. Set MIMO_API_KEY, mimo_key, or ollamaApiKey with mimo_URL_openai.");
   }
@@ -29,6 +29,7 @@ export async function runMimo({ model, baseUrl, system, prompt, json = false, ti
       method: "POST",
       headers: {
         Authorization: `Bearer ${config.apiKey}`,
+        "api-key": config.apiKey,
         "Content-Type": "application/json",
       },
       signal: controller?.signal,
@@ -36,7 +37,7 @@ export async function runMimo({ model, baseUrl, system, prompt, json = false, ti
         model: config.model,
         messages: [
           ...(system ? [{ role: "system", content: system }] : []),
-          { role: "user", content: prompt },
+          { role: "user", content: buildUserContent({ prompt, images }) },
         ],
         temperature: 0.7,
         stream: false,
@@ -74,4 +75,19 @@ export async function runMimo({ model, baseUrl, system, prompt, json = false, ti
   }
 
   return { stdout, model: config.model, baseUrl: config.baseUrl, envFiles: config.envFiles };
+}
+
+function buildUserContent({ prompt, images = [] }) {
+  const normalizedImages = images.filter((image) => image?.dataUrl);
+  if (!normalizedImages.length) return prompt;
+  return [
+    { type: "text", text: prompt },
+    ...normalizedImages.map((image) => ({
+      type: "image_url",
+      image_url: {
+        url: image.dataUrl,
+        detail: image.detail || "high",
+      },
+    })),
+  ];
 }

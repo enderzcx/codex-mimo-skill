@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { extname } from "node:path";
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
 import { stat } from "node:fs/promises";
@@ -29,6 +30,7 @@ import {
 } from "./state.mjs";
 
 const INPUT_FILE_BYTE_CAP = 48 * 1024;
+const IMAGE_FILE_BYTE_CAP = 8 * 1024 * 1024;
 
 export async function main(argv) {
   const [command, ...rest] = argv;
@@ -80,10 +82,11 @@ export async function delegate(argv) {
   const task = opts.task || (await readStdinIfPiped());
   const mode = normalizeMode(opts.mode);
   const files = opts.inputFiles.map(readInputFile);
+  const images = opts.imageFiles.map(readImageFile);
   const system = buildSystemPrompt(mode, opts.json);
-  const prompt = buildUserPrompt({ task, contexts: opts.contexts, files });
-  const config = resolveMimoConfig({ model: opts.model, baseUrl: opts.baseUrl });
-  const routing = routeMetadata({ mode, config, json: opts.json, inputFiles: files });
+  const prompt = buildUserPrompt({ task, contexts: opts.contexts, files, images });
+  const config = resolveMimoConfig({ model: opts.model, baseUrl: opts.baseUrl, needsVision: images.length > 0 });
+  const routing = routeMetadata({ mode, config, json: opts.json, inputFiles: files, images });
 
   if (opts.dryRun) {
     writeJson({
@@ -91,16 +94,17 @@ export async function delegate(argv) {
       routing,
       task: task || null,
       input_files: files.map((file) => ({ path: file.path, bytes: file.bytes, truncated: file.truncated })),
+      images: images.map(publicImageMetadata),
     });
     return;
   }
 
   if (opts.background) {
-    enqueueBackgroundDelegate({ opts, task, mode, config, routing, files });
+    enqueueBackgroundDelegate({ opts, task, mode, config, routing, files, images });
     return;
   }
 
-  const output = await runDelegateRequest({ opts, task, mode, config, routing, files });
+  const output = await runDelegateRequest({ opts, task, mode, config, routing, files, images });
   if (opts.json) writeJson(output.wrapped);
   else writeText(output.raw);
 }
@@ -110,7 +114,8 @@ export async function harness(argv) {
   const task = opts.task || (await readStdinIfPiped());
   const mode = normalizeMode(opts.mode);
   const files = opts.inputFiles.map(readInputFile);
-  const routing = codexHarnessRouteMetadata({ mode, opts, inputFiles: files });
+  const images = opts.imageFiles.map(readImageFile);
+  const routing = codexHarnessRouteMetadata({ mode, opts, inputFiles: files, images });
 
   if (opts.dryRun) {
     writeJson({
@@ -120,28 +125,30 @@ export async function harness(argv) {
       cwd: resolve(opts.cwd || process.cwd()),
       sandbox: opts.sandbox,
       input_files: files.map((file) => ({ path: file.path, bytes: file.bytes, truncated: file.truncated })),
+      images: images.map(publicImageMetadata),
     });
     return;
   }
 
   if (opts.background) {
-    enqueueBackgroundHarness({ opts, task, mode, routing, files });
+    enqueueBackgroundHarness({ opts, task, mode, routing, files, images });
     return;
   }
 
-  const output = await runHarnessRequest({ opts, task, mode, routing, files });
+  const output = await runHarnessRequest({ opts, task, mode, routing, files, images });
   if (opts.json) writeJson(output.wrapped);
   else writeText(output.raw);
 }
 
-async function runDelegateRequest({ opts, task, mode, config, routing, files }) {
+async function runDelegateRequest({ opts, task, mode, config, routing, files, images = [] }) {
   const system = buildSystemPrompt(mode, opts.json);
-  const prompt = buildUserPrompt({ task, contexts: opts.contexts, files });
+  const prompt = buildUserPrompt({ task, contexts: opts.contexts, files, images });
   const result = await runMimo({
     model: config.model,
     baseUrl: config.baseUrl,
     system,
     prompt,
+    images,
     json: opts.json,
     timeoutMs: opts.timeoutMs,
   });
@@ -154,9 +161,9 @@ async function runDelegateRequest({ opts, task, mode, config, routing, files }) 
   };
 }
 
-async function runHarnessRequest({ opts, task, mode, routing, files }) {
+async function runHarnessRequest({ opts, task, mode, routing, files, images = [] }) {
   const system = buildSystemPrompt(mode, opts.json);
-  const prompt = buildUserPrompt({ task, contexts: opts.contexts, files });
+  const prompt = buildUserPrompt({ task, contexts: opts.contexts, files, images });
   const codexPrompt = buildCodexHarnessPrompt({ mode, system, prompt, json: opts.json });
   const result = await runCodexHarness({
     codexBin: opts.codexBin,
@@ -238,7 +245,7 @@ function writeText(value) {
   if (!value.endsWith("\n")) stdout.write("\n");
 }
 
-function enqueueBackgroundDelegate({ opts, task, mode, config, routing, files }) {
+function enqueueBackgroundDelegate({ opts, task, mode, config, routing, files, images = [] }) {
   const cwd = resolve(process.cwd());
   const workspaceRoot = resolveWorkspaceRoot(cwd);
   const jobId = generateJobId("mimo");
@@ -268,6 +275,7 @@ function enqueueBackgroundDelegate({ opts, task, mode, config, routing, files })
       config,
       routing,
       files,
+      images,
     },
   });
   appendLog(workspaceRoot, jobId, `Queued ${mode} with ${routing.selected_model}.`);
@@ -295,7 +303,7 @@ function enqueueBackgroundDelegate({ opts, task, mode, config, routing, files })
   else writeText(`MiMo task started in the background as ${jobId}. Check \`cmi status ${jobId}\` for progress.`);
 }
 
-function enqueueBackgroundHarness({ opts, task, mode, routing, files }) {
+function enqueueBackgroundHarness({ opts, task, mode, routing, files, images = [] }) {
   const cwd = resolve(opts.cwd || process.cwd());
   const workspaceRoot = resolveWorkspaceRoot(cwd);
   const jobId = generateJobId("mimo-codex");
@@ -332,6 +340,7 @@ function enqueueBackgroundHarness({ opts, task, mode, routing, files }) {
       mode,
       routing,
       files,
+      images,
     },
   });
   appendLog(workspaceRoot, jobId, `Queued ${mode} in Codex harness with ${routing.selected_model}.`);
@@ -368,6 +377,7 @@ async function health(argv) {
     model: config.model,
     base_url: redactUrl(config.baseUrl),
     key_present: config.hasKey,
+    vision_model: resolveMimoConfig({ model: opts.model, baseUrl: opts.baseUrl, needsVision: true }).model,
     env_files: config.envFiles,
   };
   if (opts.json) writeJson(payload);
@@ -378,6 +388,7 @@ export function parseDelegateArgs(argv) {
   const opts = {
     mode: "general",
     inputFiles: [],
+    imageFiles: [],
     contexts: [],
     json: false,
     dryRun: false,
@@ -392,6 +403,7 @@ export function parseDelegateArgs(argv) {
     const arg = argv[i];
     if (arg === "--mode") opts.mode = requireValue(argv, ++i, "--mode");
     else if (arg === "--input") opts.inputFiles.push(requireValue(argv, ++i, "--input"));
+    else if (arg === "--image") opts.imageFiles.push(requireValue(argv, ++i, "--image"));
     else if (arg === "--context") opts.contexts.push(requireValue(argv, ++i, "--context"));
     else if (arg === "--json") opts.json = true;
     else if (arg === "--dry-run") opts.dryRun = true;
@@ -412,6 +424,7 @@ export function parseHarnessArgs(argv) {
   const opts = {
     mode: "general",
     inputFiles: [],
+    imageFiles: [],
     contexts: [],
     json: false,
     dryRun: false,
@@ -436,6 +449,7 @@ export function parseHarnessArgs(argv) {
     const arg = argv[i];
     if (arg === "--mode") opts.mode = requireValue(argv, ++i, "--mode");
     else if (arg === "--input") opts.inputFiles.push(requireValue(argv, ++i, "--input"));
+    else if (arg === "--image") opts.imageFiles.push(requireValue(argv, ++i, "--image"));
     else if (arg === "--context") opts.contexts.push(requireValue(argv, ++i, "--context"));
     else if (arg === "--json") opts.json = true;
     else if (arg === "--dry-run") opts.dryRun = true;
@@ -690,6 +704,40 @@ function readInputFile(path) {
   };
 }
 
+function readImageFile(path) {
+  const buffer = readFileSync(path);
+  const bytes = buffer.byteLength;
+  if (bytes > IMAGE_FILE_BYTE_CAP) {
+    throw new Error(`image file too large: ${path} is ${bytes} bytes; cap is ${IMAGE_FILE_BYTE_CAP}`);
+  }
+  const mime = mimeForImagePath(path);
+  return {
+    path,
+    mime,
+    bytes,
+    detail: "high",
+    dataUrl: `data:${mime};base64,${buffer.toString("base64")}`,
+  };
+}
+
+function mimeForImagePath(path) {
+  const ext = extname(path).toLowerCase();
+  if (ext === ".png") return "image/png";
+  if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
+  if (ext === ".webp") return "image/webp";
+  if (ext === ".gif") return "image/gif";
+  throw new Error(`unsupported image type for --image: ${path}. Use png, jpg, jpeg, webp, or gif.`);
+}
+
+function publicImageMetadata(image) {
+  return {
+    path: image.path,
+    mime: image.mime,
+    bytes: image.bytes,
+    detail: image.detail,
+  };
+}
+
 async function readStdinIfPiped() {
   try {
     const info = await stat("/dev/stdin");
@@ -709,22 +757,24 @@ async function readStdinIfPiped() {
   return "";
 }
 
-export function routeMetadata({ mode, config, inputFiles = [] }) {
+export function routeMetadata({ mode, config, inputFiles = [], images = [] }) {
   return {
     mode,
     provider: "mimo",
     selected_model: config.model,
     base_url: redactUrl(config.baseUrl),
+    vision_enabled: images.length > 0,
     output_kind: mode === "frontend-first-pass" ? "code-brief" : mode.includes("review") ? "review" : "brief",
     allow_code: mode === "frontend-first-pass",
     handoff_to: "codex",
     key_present: config.hasKey,
     env_files: config.envFiles,
     input_files: inputFiles.map((file) => ({ path: file.path, bytes: file.bytes, truncated: file.truncated })),
+    images: images.map(publicImageMetadata),
   };
 }
 
-export function codexHarnessRouteMetadata({ mode, opts, inputFiles = [] }) {
+export function codexHarnessRouteMetadata({ mode, opts, inputFiles = [], images = [] }) {
   return {
     mode,
     provider: "mimo",
@@ -743,6 +793,7 @@ export function codexHarnessRouteMetadata({ mode, opts, inputFiles = [] }) {
     cwd: resolve(opts.cwd || process.cwd()),
     adapter_base_url: opts.useMimo2Codex ? `http://${opts.adapterHost}:${opts.adapterPort}/v1` : null,
     input_files: inputFiles.map((file) => ({ path: file.path, bytes: file.bytes, truncated: file.truncated })),
+    images: images.map(publicImageMetadata),
   };
 }
 
@@ -923,10 +974,11 @@ function printDelegateHelp() {
 Options:
   --mode <mode>        ${MIMO_MODES.join(" | ")}
   --input <path>       Attach an input file; repeatable.
+  --image <path>       Attach a screenshot/image for MiMo vision; repeatable.
   --context <text>     Add short context; repeatable.
   --json               Ask for and emit stable JSON.
   --background         Run as a tracked background job. Use for long UI/copy tasks.
-  -m, --model <id>     Override MiMo model. Default: mimo-v2.5-pro.
+  -m, --model <id>     Override MiMo model. Default: mimo-v2.5-pro; with --image default: mimo-v2.5.
   --base-url <url>     Override OpenAI-compatible base URL.
   --timeout-ms <ms>    Abort a stuck MiMo request after this many ms. Default: 180000.
   --dry-run            Print routing metadata without calling MiMo.
@@ -948,6 +1000,7 @@ For copy/UI/UX work, prefer zero-service \`cmi delegate\`.
 Options:
   --mode <mode>           ${MIMO_MODES.join(" | ")}
   --input <path>          Attach an input file; repeatable.
+  --image <path>          Attach image metadata to the harness prompt; repeatable.
   --context <text>        Add short context; repeatable.
   --json                  Ask for and emit stable JSON.
   --background            Run as a tracked background job.

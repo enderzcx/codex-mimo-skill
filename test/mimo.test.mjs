@@ -35,6 +35,13 @@ test("runs MiMo through OpenAI-compatible chat completions", async () => {
       model: "mimo-v2.5-pro",
       system: "system",
       prompt: "prompt",
+      images: [{
+        path: "/tmp/screenshot.png",
+        mime: "image/png",
+        bytes: 12,
+        detail: "high",
+        dataUrl: "data:image/png;base64,iVBORw0KGgo=",
+      }],
       json: true,
     });
 
@@ -43,6 +50,9 @@ test("runs MiMo through OpenAI-compatible chat completions", async () => {
     assert.equal(captured.init.headers.Authorization, "Bearer test-key");
     assert.equal(captured.body.model, "mimo-v2.5-pro");
     assert.deepEqual(captured.body.response_format, { type: "json_object" });
+    assert.equal(captured.body.messages[1].content[0].type, "text");
+    assert.equal(captured.body.messages[1].content[1].type, "image_url");
+    assert.equal(captured.body.messages[1].content[1].image_url.url, "data:image/png;base64,iVBORw0KGgo=");
   } finally {
     globalThis.fetch = originalFetch;
     restoreEnv(savedEnv);
@@ -88,6 +98,41 @@ test("loads MiMo credentials from CR-only .env aliases", async () => {
   }
 });
 
+test("defaults image requests to a MiMo vision model", async () => {
+  const originalFetch = globalThis.fetch;
+  const savedEnv = snapshotEnv();
+  let captured;
+
+  process.env.MIMO_API_KEY = "test-key";
+  process.env.MIMO_BASE_URL = "https://mimo.example/v1";
+  delete process.env.MIMO_MODEL;
+  delete process.env.MIMO_VISION_MODEL;
+  delete process.env.MIMO_IMAGE_MODEL;
+
+  globalThis.fetch = async (url, init) => {
+    captured = { url, init, body: JSON.parse(init.body) };
+    return new Response(
+      JSON.stringify({
+        choices: [{ message: { content: "ok" } }],
+      }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
+  };
+
+  try {
+    await runMimo({
+      system: "system",
+      prompt: "prompt",
+      images: [{ dataUrl: "data:image/png;base64,iVBORw0KGgo=" }],
+    });
+
+    assert.equal(captured.body.model, "mimo-v2.5");
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv(savedEnv);
+  }
+});
+
 test("runMimo fails clearly when fetch times out", async () => {
   const originalFetch = globalThis.fetch;
   const savedEnv = snapshotEnv();
@@ -126,6 +171,8 @@ function snapshotEnv() {
     "mimo_URL_openai",
     "ollamaApiKey",
     "MIMO_MODEL",
+    "MIMO_VISION_MODEL",
+    "MIMO_IMAGE_MODEL",
   ];
   return Object.fromEntries(keys.map((key) => [key, process.env[key]]));
 }

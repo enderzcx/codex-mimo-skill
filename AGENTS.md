@@ -16,6 +16,9 @@ visual briefs, human feedback, and G2 internal frontend first-pass candidates.
 - `cmi adapter start` + `cmi harness --mimo2codex` is the optional repo-aware path for MiMo-in-Codex experiments. It uses mimo2codex as a local Responses adapter without editing `~/.codex/config.toml`.
 - Codex remains the only production engineering owner and final reviewer.
 - `frontend-first-pass` may output candidate code, but Codex must integrate and verify.
+- For visual verification, Codex should capture browser screenshots first, then use `cmi delegate --mode ui-review-cn --image <desktop.png> --image <mobile.png> --json "<task>"` so MiMo can critique actual pixels if the configured endpoint supports image input. Image tasks default to `mimo-v2.5`; text tasks default to `mimo-v2.5-pro`.
+- `--input` is text-only; use `--image` for screenshots. Direct `cmi delegate --image` sends images to MiMo. `cmi harness --image` only provides image path metadata to Codex harness and is not the default visual-review path.
+- Do not claim MiMo saw screenshots unless `cmi delegate --image ...` succeeds. The current Token Plan/OpenAI-compatible route may return `No endpoints found that support image input`; then Codex must use browser screenshots/pixel checks and pass textual observations to MiMo if useful.
 - Do not claim affiliation with Xiaomi MiMo or the `mimo2codex` project.
 - Credit `7as0nch/mimo2codex` as inspiration/reference when discussing prior art.
 - Follow the `openai/codex-plugin-cc` pattern for long work: use tracked background jobs instead of blocking the main session.

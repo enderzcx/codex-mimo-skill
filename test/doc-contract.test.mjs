@@ -12,6 +12,8 @@ test("README documents rendered/raw result handling", () => {
   assert.match(readme, /rendered/);
   assert.match(readme, /raw/);
   assert.match(readme, /raw fallback/);
+  assert.match(readme, /--image/);
+  assert.match(readme, /截图视觉/);
 });
 
 test("skill documents MiMo result handling discipline", () => {
@@ -23,6 +25,8 @@ test("skill documents MiMo result handling discipline", () => {
   assert.match(skill, /does not start a service/);
   assert.match(skill, /wire_api = "responses"/);
   assert.match(skill, /Do not say MiMo was used unless a command was actually run/);
+  assert.match(skill, /--image/);
+  assert.match(skill, /true MiMo vision review/);
   assert.match(skill, /runtime\.md/);
   assert.match(skill, /result-handling\.md/);
   assert.match(skill, /prompt-templates\.md/);

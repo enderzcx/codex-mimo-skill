@@ -27,7 +27,11 @@ export function loadMimoEnv() {
   return loaded;
 }
 
-export function resolveMimoConfig({ model, baseUrl } = {}) {
+const DEFAULT_TEXT_MODEL = "mimo-v2.5-pro";
+const DEFAULT_VISION_MODEL = "mimo-v2.5";
+const VISION_MODELS = new Set(["mimo-v2.5", "mimo-v2-omni"]);
+
+export function resolveMimoConfig({ model, baseUrl, needsVision = false } = {}) {
   const envFiles = loadMimoEnv();
   const configuredBaseUrl = baseUrl ?? process.env.MIMO_BASE_URL ?? process.env.MIMO_URL_OPENAI ?? process.env.mimo_URL_openai;
   const apiKey =
@@ -36,10 +40,17 @@ export function resolveMimoConfig({ model, baseUrl } = {}) {
     process.env.XIAOMI_MIMO_API_KEY ??
     (configuredBaseUrl ? process.env.ollamaApiKey : undefined);
 
+  const envModel = process.env.MIMO_MODEL;
+  const visionModel = process.env.MIMO_VISION_MODEL ?? process.env.MIMO_IMAGE_MODEL;
+  const selectedModel = needsVision
+    ? model ?? visionModel ?? (VISION_MODELS.has(envModel) ? envModel : DEFAULT_VISION_MODEL)
+    : model ?? envModel ?? DEFAULT_TEXT_MODEL;
+
   return {
     apiKey,
     baseUrl: configuredBaseUrl ?? "https://token-plan-ams.xiaomimimo.com/v1",
-    model: model ?? process.env.MIMO_MODEL ?? "mimo-v2.5-pro",
+    model: selectedModel,
+    needsVision,
     envFiles,
     hasKey: Boolean(apiKey),
   };

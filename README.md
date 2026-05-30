@@ -8,6 +8,24 @@
 Codex 决策 -> codex-mimo 调用 MiMo -> 产出文案 / brief / 首版候选 -> Codex 验证并集成
 ```
 
+## MiMo Vision: 截图视觉批判
+
+`cmi delegate` 支持 `--image <path>`，会把截图按 OpenAI-compatible `image_url` payload 发给 MiMo，而不是把图片当文本读。按 [小米 MiMo 图片理解文档](https://platform.xiaomimimo.com/docs/usage-guide/multimodal-understanding/image-understanding)，图片输入支持模型是 `mimo-v2.5` / `mimo-v2-omni`；所以使用 `--image` 时，CLI 默认自动切到 `mimo-v2.5`，文字任务仍默认 `mimo-v2.5-pro`。
+
+这适合 UI/UX 验证阶段：Codex 先用浏览器或 Playwright 截图，再让支持 image input 的 MiMo endpoint 看截图，批判中文 UI、信息层级、视觉节奏、密度、对齐和移动端问题。
+
+```bash
+cmi delegate --mode ui-review-cn --json \
+  --input ./app/page.tsx \
+  --image /tmp/erp-page-1440.png \
+  --image /tmp/erp-page-390.png \
+  "基于代码和截图审核 UI 文案、排版节奏、视觉层级和移动端问题；按 must/fix/later 输出"
+```
+
+边界：`--input` 仍然只用于文本文件；截图必须走 `--image`。`cmi harness` 目前只把图片路径/metadata 写入 Codex harness prompt，不等同于直接给 MiMo 看图；真正视觉批判默认用 `cmi delegate --image`。
+
+注意：不是每条 MiMo API 路由都支持 image input。只有 `cmi delegate --image ...` 真实成功返回后，才能说 MiMo 看过截图；失败时由 Codex 自己做浏览器截图/像素检查，并把观察结果转成文本交给 MiMo 做 UI/UX 复盘。
+
 ## 最简路线
 
 默认不用起任何服务。大多数文案、UI/UX、中文表达、页面信息架构和内部前端首版任务，直接走：
@@ -133,8 +151,11 @@ export mimo_URL_openai=https://token-plan-ams.xiaomimimo.com/v1
 
 ```bash
 export MIMO_MODEL=mimo-v2.5-pro
+export MIMO_VISION_MODEL=mimo-v2.5
 export MIMO_BASE_URL=https://token-plan-ams.xiaomimimo.com/v1
 ```
+
+`MIMO_MODEL` 控制普通文本任务默认模型；`MIMO_VISION_MODEL` 控制 `--image` 截图/图片任务默认模型。
 
 ## Modes
 
@@ -215,6 +236,16 @@ cmi harness --mode frontend-first-pass \
 cmi delegate --mode ui-review-cn --json \
   --input ./app/page.tsx \
   "审核中文 UI 文案、信息层级和排版节奏"
+```
+
+截图视觉 review：
+
+```bash
+cmi delegate --mode ui-review-cn --json \
+  --input ./app/page.tsx \
+  --image /tmp/page-desktop.png \
+  --image /tmp/page-mobile.png \
+  "基于截图批判视觉层级、密度、对齐、可读性和中文 UI 文案；按 must/fix/later 输出"
 ```
 
 内部前端首版：

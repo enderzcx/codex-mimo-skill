@@ -15,6 +15,7 @@ Use this skill when a Codex task touches:
 - Chinese expression polishing
 - human-sounding feedback to coworkers or customers
 - visual reference image briefs
+- screenshot-based UI/UX critique after Codex captures browser screenshots
 - G2 internal admin / ERP / dashboard / prototype frontend first-pass work
 
 ## Role Boundary
@@ -67,6 +68,20 @@ codex-mimo delegate --mode ui-review-cn --json \
   --input ./app/page.tsx \
   "审核中文 UI 文案、信息层级和排版节奏"
 ```
+
+Attach screenshots for true MiMo vision review:
+
+```bash
+cmi delegate --mode ui-review-cn --json \
+  --input ./app/page.tsx \
+  --image /tmp/page-desktop.png \
+  --image /tmp/page-mobile.png \
+  "基于代码和截图审核 UI 文案、视觉层级、密度、对齐和移动端问题"
+```
+
+`--input` is text-only. Use `--image` for screenshots/images. Direct `cmi delegate --image` sends image payloads to MiMo when the configured endpoint supports image input. Xiaomi MiMo docs list `mimo-v2.5` / `mimo-v2-omni` for image understanding, so `cmi delegate --image` defaults to `mimo-v2.5`; text tasks still default to `mimo-v2.5-pro`. `cmi harness --image` only passes image path metadata into the Codex harness prompt and is not the default visual-review path.
+
+Do not claim MiMo saw screenshots unless `cmi delegate --image ...` actually succeeds. If the endpoint returns `No endpoints found that support image input`, Codex must do browser screenshot/pixel checks itself and may pass textual observations to MiMo.
 
 Health check:
 
@@ -130,7 +145,7 @@ Codex must read the actual foreground output or `cmi result <job-id>` before sum
 - `frontend-ux-plan`: full UI/UX plan Codex will implement
 - `frontend-first-pass`: complete G2 internal UI first-pass candidate files for Codex to integrate and verify
 - `visual-brief`: brief for image generation or UI reference image
-- `ui-review-cn`: review Chinese UI language, terminology, hierarchy, layout rhythm
+- `ui-review-cn`: review Chinese UI language, terminology, hierarchy, layout rhythm, and attached screenshots when provided
 - `general`: mixed MiMo task fallback
 
 ## Frontend First Pass Gate
@@ -143,6 +158,14 @@ For `frontend-first-pass`, Codex must check:
 - Normal, search/filter, empty, completed, desktop, and mobile states render.
 - 390px and 1440px have no horizontal overflow.
 - `lint`, `build`/typecheck, browser screenshot, and one primary interaction pass.
+
+After screenshots are captured, Codex should call:
+
+```bash
+cmi delegate --mode ui-review-cn --json --image <desktop.png> --image <mobile.png> "<review request>"
+```
+
+Codex still owns the final visual judgment and browser verification.
 
 Do not use MiMo as an unsupervised production React/Next owner. Production integration, API/data/state architecture, complex permissions/payments/G3 modules, SEO/a11y compliance, and final review stay with Codex.
 

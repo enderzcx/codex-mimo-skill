@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync as run } from "node:child_process";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
@@ -99,6 +99,35 @@ test("background delegate returns a job id without calling MiMo synchronously", 
   } finally {
     restoreEnv(savedEnv);
   }
+});
+
+test("delegate dry-run accepts image attachments without exposing base64", () => {
+  const cwd = mkdtempSync(join(tmpdir(), "cmi-image-dry-run-"));
+  const image = join(cwd, "screenshot.png");
+  writeFileSync(image, Buffer.from([
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+    0x00, 0x00, 0x00, 0x0d,
+  ]));
+
+  const output = run(process.execPath, [
+    BIN,
+    "delegate",
+    "--mode",
+    "ui-review-cn",
+    "--image",
+    image,
+    "--json",
+    "--dry-run",
+    "review screenshot",
+  ], { cwd, encoding: "utf8" });
+  const payload = JSON.parse(output);
+
+  assert.equal(payload.routing.selected_model, "mimo-v2.5");
+  assert.equal(payload.routing.vision_enabled, true);
+  assert.equal(payload.routing.images[0].path, image);
+  assert.equal(payload.routing.images[0].mime, "image/png");
+  assert.equal(payload.routing.images[0].bytes, 12);
+  assert.equal(JSON.stringify(payload).includes("base64"), false);
 });
 
 test("harness dry-run exposes Codex harness routing without calling Codex", () => {

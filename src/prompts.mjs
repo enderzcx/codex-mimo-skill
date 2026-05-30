@@ -33,7 +33,7 @@ const MODE_INSTRUCTIONS = {
   "frontend-ux-plan": "输出完整 UI/UX 方案：目标用户、信息架构、关键状态、响应式、可访问性、实现注意点。Codex 会负责代码。",
   "frontend-first-pass": "为 G2 内部 UI、dashboard、console 或 prototype 输出完整前端首版候选源码和 UX 说明。允许给完整文件内容，但不要声称已改仓库；Codex 会接入、修机械问题、验证并最终裁决。",
   "visual-brief": "输出给图像生成或 UI 参考图的 brief：主体、构图、材质、色彩、光线、比例、禁用项。",
-  "ui-review-cn": "审中文 UI 文案、术语、层级、排版节奏和可读性。按 must/fix/later 给建议。",
+  "ui-review-cn": "审中文 UI 文案、术语、层级、排版节奏、视觉呈现和可读性。若附了截图，必须基于截图可见内容做视觉批判；按 must/fix/later 给建议。",
   general: "根据任务给内容、设计或产品表达建议。Codex 是工程执行者和最终裁决者。",
 };
 
@@ -111,7 +111,7 @@ Output:
 ${outputContract}`;
 }
 
-export function buildUserPrompt({ task, contexts = [], files = [] }) {
+export function buildUserPrompt({ task, contexts = [], files = [], images = [] }) {
   const parts = [];
   parts.push("Task:");
   parts.push(task || "(no explicit task; infer from context and attached files)");
@@ -125,6 +125,13 @@ export function buildUserPrompt({ task, contexts = [], files = [] }) {
       const suffix = file.truncated ? "\n[TRUNCATED]" : "";
       parts.push(`--- ${file.path} ---\n${file.content}${suffix}`);
     }
+  }
+  if (images.length > 0) {
+    parts.push("\nAttached images:");
+    for (const image of images) {
+      parts.push(`- ${image.path} (${image.mime}, ${image.bytes} bytes)`);
+    }
+    parts.push("Use the attached screenshots directly for visual critique. Do not pretend to see details that are not visible.");
   }
   return parts.join("\n");
 }

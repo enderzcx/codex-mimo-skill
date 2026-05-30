@@ -18,15 +18,25 @@ test("frontend first-pass prompt includes guardrails", () => {
   assert.match(prompt, /Codex validation checklist/);
 });
 
+test("ui review prompt instructs screenshot-based visual critique", () => {
+  const prompt = buildSystemPrompt("ui-review-cn", true);
+  assert.match(prompt, /截图/);
+  assert.match(prompt, /视觉批判/);
+});
+
 test("user prompt includes context and files", () => {
   const prompt = buildUserPrompt({
     task: "review UI",
     contexts: ["audience: internal ERP users"],
     files: [{ path: "/tmp/app.tsx", content: "hello", truncated: false }],
+    images: [{ path: "/tmp/screenshot.png", mime: "image/png", bytes: 123 }],
   });
   assert.match(prompt, /review UI/);
   assert.match(prompt, /internal ERP users/);
   assert.match(prompt, /--- \/tmp\/app.tsx ---/);
+  assert.match(prompt, /Attached images/);
+  assert.match(prompt, /\/tmp\/screenshot\.png/);
+  assert.match(prompt, /Use the attached screenshots directly/);
 });
 
 test("wraps non-json output", () => {
